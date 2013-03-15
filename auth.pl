@@ -94,6 +94,7 @@ get '/v_one_cb' => sub {
 	$self->redirect_to( 'https://retrorocket.biz/upico/v_one.cgi' );
 } => 'v_one_cb';
 
+app->sessions->secure(1);
 app->secret("***"); # セッション管理のために付けておく
 app->start;
 

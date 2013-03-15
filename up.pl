@@ -115,6 +115,7 @@ get '/logout' => sub {
 	#$self->render;
 } => 'logout';
 
+app->sessions->secure(1); 
 app->secret("***"); # セッション管理のために付けておく
 app->start;
 
