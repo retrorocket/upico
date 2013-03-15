@@ -4,7 +4,7 @@ use strict;
 use warnings;
 use utf8;
 
-use Net::Twitter::Lite::WithAPIv1_1;
+use Net::Twitter::Lite;
 use Mojolicious::Lite;
 use File::Basename 'basename';
 use File::Path 'mkpath';
@@ -12,9 +12,11 @@ use File::Path 'mkpath';
 my $consumer_key ="***";
 my $consumer_secret = "***";
 
-my $nt = Net::Twitter::Lite::WithAPIv1_1->new(
+my $nt = Net::Twitter::Lite->new(
+	apiurl => 'http://api.twitter.com/1',
 	consumer_key => $consumer_key,
 	consumer_secret => $consumer_secret,
+	legacy_lists_api => 0
 );
 
 # Image base URL
@@ -34,8 +36,10 @@ get '/' => sub {
 	my $screen_name = $self->session( 'screen_name' ) || '';
 
 	# セッションにaccess_tokenが残ってなければ再認証
-	my $url = 'https://retrorocket.biz/upico/auth.cgi';
+	my $url = 'https://retrorocket.biz/upico/auth.cgi/v_one';
 	return $self->redirect_to( $url ) unless ($access_token && $access_token_secret);
+#	return $self->redirect_to( 'auth' ) unless ($access_token && $access_token_secret);
+
 
 } => 'index';
 
@@ -47,7 +51,9 @@ post '/upload' => sub {
 	my $access_token_secret = $self->session( 'access_token_secret' ) || '';
 	my $screen_name = $self->session( 'screen_name' ) || '';
 
-	my $url = 'https://retrorocket.biz/upico/auth.cgi';
+	# セッションにaccess_tokenが残ってなければ再認証
+	#return $self->redirect_to( 'auth' ) unless ($access_token && $access_token_secret);
+	my $url = 'https://retrorocket.biz/upico/auth.cgi/v_one';
 	return $self->redirect_to( $url ) unless ($access_token && $access_token_secret);
 
 
@@ -108,6 +114,7 @@ post '/upload' => sub {
 	$self->session( expires => 1 );
 
 } => 'upload';
+
 # Session削除
 get '/logout' => sub {
 	my $self = shift;
