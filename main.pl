@@ -9,24 +9,25 @@ use Mojolicious::Lite;
 use File::Basename 'basename';
 use File::Path 'mkpath';
 
-my $consumer_key ="***";
-my $consumer_secret = "***";
+my $consumer_key ="xxx";
+my $consumer_secret = "xxx";
 
 my $nt = Net::Twitter::Lite::WithAPIv1_1->new(
 	consumer_key => $consumer_key,
 	consumer_secret => $consumer_secret,
 	ssl => 1
 );
-app->config(hypnotoad => {listen => ['http://*:sectret']});
+app->config(hypnotoad => {listen => ['http://*:xxx']});
 app->hook('before_dispatch' => sub {
 	my $self = shift;
 	if ($self->req->headers->header('X-Forwarded-Host')) {
-		my $path = shift @{$self->req->url->path->parts};
-		push @{$self->req->url->base->path->parts}, $path;
+	  #Proxy Path setting
+	  my $path = shift @{$self->req->url->path->parts};
+	  push @{$self->req->url->base->path->parts}, $path;
 	}
 });
 # Image base URL
-my $IMAGE_BASE = app->home .'/xxx';
+my $IMAGE_BASE = app->home .'/public/image';
 my $IMAGE_DIR  = $IMAGE_BASE;
 # Create directory if not exists
 unless (-d $IMAGE_DIR) {
@@ -58,9 +59,11 @@ get '/auth_cb' => sub {
 	$nt->request_token( $token );
 	$nt->request_token_secret( $token_secret );
 
+	# Access token取得
 	my ($access_token, $access_token_secret, $user_id, $screen_name)
 	= $nt->request_access_token( verifier => $verifier );
 
+	# Sessionに格納
 	$self->session( access_token => $access_token );
 	$self->session( access_token_secret => $access_token_secret );
 	$self->session( screen_name => $screen_name );
@@ -69,13 +72,14 @@ get '/auth_cb' => sub {
 } => 'auth_cb';
 
 
+# Display top page
 get '/' => sub {
 	my $self = shift;
 
 	my $access_token = $self->session( 'access_token' ) || '';
 	my $access_token_secret = $self->session( 'access_token_secret' ) || '';
 
-	# セッションにトークンが残ってないならトップに飛ばす
+	# セッションにaccess_tokenが残ってなければ再認証
 	return $self->redirect_to( 'http://retrorocket.biz/upico' ) unless ($access_token && $access_token_secret);
 
 } => 'index';
@@ -92,6 +96,7 @@ post '/upload' => sub {
 	my $access_token_secret = $self->session( 'access_token_secret' ) || '';
 	my $screen_name = $self->session( 'screen_name' ) || '';
 
+	# セッションにaccess_tokenが残ってなければ再認証
 	return $self->redirect_to( 'http://retrorocket.biz/upico' ) unless ($access_token && $access_token_secret);
 
 	$nt->access_token( $access_token );
@@ -153,13 +158,18 @@ post '/upload' => sub {
 
 } => 'upload';
 
+get '/upload' => sub {
+	my $self = shift;
+	$self->redirect_to( $self->url_for('index')->to_abs->scheme('https') );
+} => 'get_upload';
 
+# Session削除
 get '/logout' => sub {
 	my $self = shift;
 	$self->session( expires => 1 );
+	#$self->render;
 } => 'logout';
 
 app->sessions->secure(1);
 app->secrets(["xxx"]); # セッション管理のために付けておく
 app->start;
-
