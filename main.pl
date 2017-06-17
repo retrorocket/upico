@@ -9,6 +9,7 @@ use Mojolicious::Lite;
 use File::Basename 'basename';
 use File::Path 'mkpath';
 use Config::Pit;
+use Image::Magick;
 
 # Config::Pit
 my $config = Config::Pit::get("upico");
@@ -25,8 +26,6 @@ my $nt = Net::Twitter::Lite::WithAPIv1_1->new(
 app->config(
 	hypnotoad => {
 		listen => ['http://*:'.$config->{port}],
-		heartbeat_timeout => 90,
-		inactivity_timeout => 90,
 	},
 );
 
@@ -38,6 +37,10 @@ app->hook('before_dispatch' => sub {
 	  push @{$self->req->url->base->path->parts}, $path;
 	}
 });
+
+my $THIS_SITE = "https://retrorocket.biz/upico";
+
+
 # Image base URL
 my $IMAGE_BASE = app->home .'/public/image';
 my $IMAGE_DIR  = $IMAGE_BASE;
@@ -49,13 +52,15 @@ unless (-d $IMAGE_DIR) {
 get '/auth' => sub {
 	my $self = shift;
 
-	if($self->param('session')){
-		$self->session( flag => $self->param('session') );
+	if($self->param("session")){
+		$self->session( flag => $self->param("session") );
+	}
+
+	if($self->param("png32")){
+		$self->session( png32 => $self->param("png32") );
 	}
 
 	my $cb_url = $self->url_for('auth_cb')->to_abs->scheme('https');
-	#my $cb_url = $self->url_for('auth_cb')->to_abs->scheme('http');
-	#my $url = $nt->get_authorization_url( callback => $cb_url );
 	my $url = $nt->get_authentication_url( callback => $cb_url );
 
 	$self->session( token => $nt->request_token );
@@ -91,11 +96,11 @@ get '/auth_cb' => sub {
 get '/' => sub {
 	my $self = shift;
 
-	my $access_token = $self->session( 'access_token' ) || '';
-	my $access_token_secret = $self->session( 'access_token_secret' ) || '';
+	my $access_token = $self->session('access_token') || '';
+	my $access_token_secret = $self->session('access_token_secret') || '';
 
 	# セッションにaccess_tokenが残ってなければ再認証
-	return $self->redirect_to( 'http://retrorocket.biz/upico' ) unless ($access_token && $access_token_secret);
+	return $self->redirect_to($THIS_SITE) unless ($access_token && $access_token_secret);
 
 } => 'index';
 
@@ -112,7 +117,7 @@ post '/upload' => sub {
 	my $screen_name = $self->session( 'screen_name' ) || '';
 
 	# セッションにaccess_tokenが残ってなければ再認証
-	return $self->redirect_to( 'http://retrorocket.biz/upico' ) unless ($access_token && $access_token_secret);
+	return $self->redirect_to( $THIS_SITE ) unless ($access_token && $access_token_secret);
 
 	$nt->access_token( $access_token );
 	$nt->access_token_secret( $access_token_secret );
@@ -127,38 +132,32 @@ post '/upload' => sub {
 			message  => "ファイルサイズが0byte以下です。"
 		);
 	}
+	# 拡張子つけてアップロードしてくれない人が多すぎるのでこちらでチェックせずTwitter側にチェックさせることにした。
 
-	# こちらでのチェックをパスしてTwitter側にチェックさせる。
-	# なんていうかもう勘弁して欲しい…
-
-	# Check file type
-	#my $image_type = $image->headers->content_type;
-	#my %valid_types = map {$_ => 1} qw(image/gif image/jpeg image/png);
-
-	# Content type is wrong
-	#unless ($valid_types{$image_type}) {
-	#	return $self->render(
-	#		template => 'error',
-	#		message  => "ファイルタイプが画像ではありません．"
-	#	);
-	#}
-
-	# Extention
-	#my $exts = {'image/gif' => 'gif', 'image/jpeg' => 'jpg',
-	#		'image/png' => 'png'};
-	#my $ext = $exts->{$image_type};
-
-	# Image file
-	my $image_file = "$IMAGE_DIR/" . $screen_name . "_" .$image->filename;
+	my $image_file = "$IMAGE_DIR/" . $screen_name;
 
 	# If file is exists, Retry creating filename
 	while(-f $image_file){
 		my $rand_num = int(rand 100000);
-		$image_file = "$IMAGE_DIR/" . $screen_name . $rand_num . "_" .$image->filename;
+		$image_file = "$IMAGE_DIR/" . $screen_name ."_". $rand_num;
 	}
-
+	
+	#$image_file = uri_escape( $image_file );
 	# Save to file
 	$image->move_to($image_file);
+
+	#PNG変換モード
+	if($self->session("png32")){
+		my $img = Image::Magick->new;
+		$img->Read($image_file);
+		$img->Set(alpha => 'On');
+		my @pixels = $img->GetPixel(x=>1,y=>1);
+		$pixels[3]=0.99;
+		$img->SetPixel(x=>1, y=>1, color=>\@pixels);
+		binmode(STDOUT);
+		$img->Write("PNG32:".$image_file);
+		undef $img;
+	}
 
 	$self->stash('name' => $screen_name);
 
