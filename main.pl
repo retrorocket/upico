@@ -136,13 +136,11 @@ post '/upload' => sub {
 
 	my $image_file = "$IMAGE_DIR/" . $screen_name;
 
-	# If file is exists, Retry creating filename
+	# If file is exists, delete file
 	while(-f $image_file){
-		my $rand_num = int(rand 100000);
-		$image_file = "$IMAGE_DIR/" . $screen_name ."_". $rand_num;
+		unlink $image_file;
 	}
 	
-	#$image_file = uri_escape( $image_file );
 	# Save to file
 	$image->move_to($image_file);
 
@@ -151,9 +149,9 @@ post '/upload' => sub {
 		my $img = Image::Magick->new;
 		$img->Read($image_file);
 		$img->Set(alpha => 'On');
-		my @pixels = $img->GetPixel(x=>1,y=>1);
+		my @pixels = $img->GetPixel(x=>0,y=>0);
 		$pixels[3]=0.99;
-		$img->SetPixel(x=>1, y=>1, color=>\@pixels);
+		$img->SetPixel(x=>0, y=>0, color=>\@pixels);
 		binmode(STDOUT);
 		$img->Write("PNG32:".$image_file);
 		undef $img;
