@@ -150,7 +150,7 @@ post '/upload' => sub {
 		$img->Read($image_file);
 		$img->Set(alpha => 'On');
 		my @pixels = $img->GetPixel(x=>0,y=>0);
-		$pixels[3]=0.99;
+		$pixels[3]=0.998;
 		$img->SetPixel(x=>0, y=>0, color=>\@pixels);
 		binmode(STDOUT);
 		$img->Write("PNG32:".$image_file);
