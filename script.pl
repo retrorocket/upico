@@ -222,7 +222,7 @@ get '/logout' => sub {
 } => 'logout';
 
 app->sessions->secure(1);
-app->sessions->cookie_name($config->{secure});
+app->sessions->cookie_name($config->{cookie_name});
 # セッション管理のために付けておく
-app->secrets( [ $config->{secure} ] );
+app->secrets( [$config->{secure}] );
 app->start;
