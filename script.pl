@@ -17,15 +17,10 @@ my $config = Config::Pit::get("upico");
 my $consumer_key    = $config->{consumer_key};
 my $consumer_secret = $config->{consumer_secret};
 
-my $nt = Net::Twitter::Lite::WithAPIv1_1->new(
-    consumer_key    => $consumer_key,
-    consumer_secret => $consumer_secret,
-    ssl             => 1
-);
-
 app->config(
     hypnotoad => {
         listen => [ 'http://*:' . $config->{port} ],
+        workers => 4,
     },
 );
 
@@ -44,7 +39,7 @@ app->hook(
 my $THIS_SITE = "https://retrorocket.biz/upico";
 
 # Image base URL
-my $IMAGE_BASE = app->home . '/public/image';
+my $IMAGE_BASE = app->home . '/assets/images';
 my $IMAGE_DIR  = $IMAGE_BASE;
 
 # Create directory if not exists
@@ -54,6 +49,12 @@ unless ( -d $IMAGE_DIR ) {
 
 get '/auth' => sub {
     my $self = shift;
+
+    my $nt = Net::Twitter::Lite::WithAPIv1_1->new(
+        consumer_key    => $consumer_key,
+        consumer_secret => $consumer_secret,
+        ssl             => 1
+    );
 
     if ( $self->param("session") ) {
         $self->session( flag => $self->param("session") );
@@ -78,12 +79,18 @@ get '/auth_cb' => sub {
     my $token        = $self->session('token') || '';
     my $token_secret = $self->session('token_secret') || '';
 
+    my $nt = Net::Twitter::Lite::WithAPIv1_1->new(
+        consumer_key    => $consumer_key,
+        consumer_secret => $consumer_secret,
+        ssl             => 1
+    );
+
     $nt->request_token($token);
     $nt->request_token_secret($token_secret);
 
     # Access token取得
     my ( $access_token, $access_token_secret, $user_id, $screen_name ) =
-      $nt->request_access_token( verifier => $verifier );
+        $nt->request_access_token( verifier => $verifier );
 
     # Sessionに格納
     $self->session( access_token        => $access_token );
@@ -103,8 +110,7 @@ get '/' => sub {
     my $access_token_secret = $self->session('access_token_secret') || '';
 
     # セッションにaccess_tokenが残ってなければ再認証
-    return $self->redirect_to($THIS_SITE)
-      unless ( $access_token && $access_token_secret );
+    return $self->redirect_to($THIS_SITE) unless ( $access_token && $access_token_secret );
 
 } => 'index';
 
@@ -121,8 +127,13 @@ post '/upload' => sub {
     my $screen_name         = $self->session('screen_name')         || '';
 
     # セッションにaccess_tokenが残ってなければ再認証
-    return $self->redirect_to($THIS_SITE)
-      unless ( $access_token && $access_token_secret );
+    return $self->redirect_to($THIS_SITE) unless ( $access_token && $access_token_secret );
+
+    my $nt = Net::Twitter::Lite::WithAPIv1_1->new(
+        consumer_key    => $consumer_key,
+        consumer_secret => $consumer_secret,
+        ssl             => 1
+    );
 
     $nt->access_token($access_token);
     $nt->access_token_secret($access_token_secret);
@@ -135,6 +146,11 @@ post '/upload' => sub {
         return $self->render(
             template => 'error',
             message  => "ファイルサイズが0byte以下です。"
+        );
+    } elsif ( $image->size >= 3 * 1024 * 1024) { # 3MB
+        return $self->render(
+            template => 'error',
+            message  => "ファイルサイズが3MB以上です。"
         );
     }
 
@@ -174,17 +190,21 @@ post '/upload' => sub {
     if ( $error_occured ne "false" ) {
         $result_message =
             "ファイルのアップロードに失敗しました（Twitter Error："
-          . $error_occured . "）";
+            . $error_occured . "）";
     }
     $self->stash( 'message' => $result_message );
 
     #ファイル削除
     unlink $image_file;
-
+    undef $image;
+    undef $nt;
+    
     #セッション削除
     if ( $flag == 0 ) {
         $self->session( expires => 1 );
     }
+
+    return 1;
 
 } => 'upload';
 
@@ -202,6 +222,7 @@ get '/logout' => sub {
 } => 'logout';
 
 app->sessions->secure(1);
+app->sessions->cookie_name($config->{secure});
 # セッション管理のために付けておく
 app->secrets( [ $config->{secure} ] );
 app->start;
